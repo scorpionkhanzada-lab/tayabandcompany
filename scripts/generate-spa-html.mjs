@@ -10,27 +10,58 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const baseDist = resolve(__dirname, "..", "dist");
 
-// 1. Dynamically find out if the client assets are in dist/client or straight in dist/
-let clientDir = resolve(__dirname, "..", "dist", "client");
-let assetsDir = join(clientDir, "assets");
-let manifestPath = join(clientDir, ".vite", "manifest.json");
+// --- 1. DYNAMIC DIRECTORY RESOLUTION ---
+let clientDir = "";
+let assetsDir = "";
+let manifestPath = "";
 
-if (!existsSync(assetsDir) || !existsSync(manifestPath)) {
-  console.log("[spa-html] dist/client not found. Trying root dist/ as fallback...");
-  clientDir = resolve(__dirname, "..", "dist");
-  assetsDir = join(clientDir, "assets");
-  manifestPath = join(clientDir, ".vite", "manifest.json");
+// Array of potential directories where the framework might compile the client assets
+const possiblePaths = [
+  resolve(baseDist, "static"), // 👈 Lovable / TanStack standard deployment target
+  resolve(baseDist, "client"),
+  baseDist
+];
+
+console.log("[spa-html] Scanning directories for compiled assets...");
+
+for (const dir of possiblePaths) {
+  const testAssets = join(dir, "assets");
+  const testManifest = join(dir, ".vite", "manifest.json");
+  
+  if (existsSync(testAssets) && existsSync(testManifest)) {
+    clientDir = dir;
+    assetsDir = testAssets;
+    manifestPath = testManifest;
+    break;
+  }
 }
 
-// 2. Perform the validation pass on the discovered directory
-if (!existsSync(assetsDir) || !existsSync(manifestPath)) {
-  console.error("[spa-html] Execution aborted: Build assets or .vite/manifest.json could not be located in dist/ or dist/client/.");
+// --- 2. FALLBACK DIAGNOSTIC SYSTEM ---
+if (!clientDir) {
+  console.log("\n[spa-html] ⚠️ Build files not found in standard paths. Printing 'dist' root structure for debugging:");
+  if (existsSync(baseDist)) {
+    try {
+      console.log("[spa-html] Contents of 'dist':", readdirSync(baseDist));
+      const subfolders = readdirSync(baseDist).filter(f => !f.includes('.'));
+      for (const folder of subfolders) {
+        console.log(`[spa-html] Contents of 'dist/${folder}':`, readdirSync(join(baseDist, folder)));
+      }
+    } catch (e) {
+      console.log("[spa-html] Failed to map dist subdirectories:", e.message);
+    }
+  } else {
+    console.log("[spa-html] 'dist' root path is missing entirely.");
+  }
+
+  console.error("\n[spa-html] ❌ Execution aborted: Build assets or .vite/manifest.json could not be located in dist/static, dist/client, or dist/.");
   process.exit(1);
 }
 
-console.log(`[spa-html] Targeted client directory verified at: ${clientDir}`);
+console.log(`[spa-html] ✅ Target client distribution identified at: ${clientDir}`);
 
+// --- 3. PROCESSING MANIFEST & COMPILING SPA HTML ---
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const manifestEntries = Object.values(manifest);
 const entry = manifestEntries.find((item) => item && item.isEntry && typeof item.file === "string");
@@ -38,7 +69,7 @@ const entryJs = entry?.file;
 const entryCss = Array.isArray(entry?.css) ? entry.css[0] : undefined;
 
 if (!entryJs) {
-  console.error(`[spa-html] Could not find a client entry inside manifest at: ${manifestPath}`);
+  console.error(`[spa-html] Could not find a entrypoint asset inside manifest at: ${manifestPath}`);
   process.exit(1);
 }
 
@@ -67,7 +98,7 @@ ${entryCss ? `    <link rel="stylesheet" href="/${entryCss}" />\n` : ""}    <scr
 writeFileSync(join(clientDir, "index.html"), html, "utf8");
 console.log(`[spa-html] Wrote index.html to target directory (entry=${entryJs}${entryCss ? `, css=${entryCss}` : ""})`);
 
-// Copy public/ assets that the build may not auto-copy (defensive)
+// --- 4. DEFENSIVE PUBLIC ASSET REPLICATION ---
 const publicDir = resolve(__dirname, "..", "public");
 if (existsSync(publicDir)) {
   for (const f of readdirSync(publicDir)) {
