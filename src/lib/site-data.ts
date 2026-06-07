@@ -26,9 +26,9 @@ import flange3 from "@/assets/flange3.jpg";
 
 // Valve Image Imports
 import valve1 from "@/assets/Valve1.jpg";
-import valve2 from "@/assets/valve2.jpg";
-import valve3 from "@/assets/valve3.jpg";
-import valve4 from "@/assets/valve4.jpg";
+import valve2 from "@/assets/Valve2.jpg";
+import valve3 from "@/assets/Valve3.jpg";
+import valve4 from "@/assets/Valve4.jpg";
 
 // Historical Legacy Projects Imports
 import legacyChirat from "@/assets/legacy-chirat-cement-1984.jpg";
