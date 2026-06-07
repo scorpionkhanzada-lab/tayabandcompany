@@ -7,6 +7,5 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
-  cloudflare: false,
+  // Clean configuration wrapper to let Lovable auto-negotiate the hosting environment parameters natively
 });
-
