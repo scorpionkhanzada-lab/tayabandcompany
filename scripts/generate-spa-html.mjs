@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Postbuild: generate a static SPA index.html in dist/client so the app
- * can be deployed to static hosts without relying on the SSR worker output.
+ * Postbuild: generate a static SPA index.html in the client distribution directory
+ * so the app can be deployed to static hosts without relying on the SSR worker output.
  * The client bundle hydrates from scratch and router navigation works via
  * the platform rewrite fallback.
  */
@@ -10,14 +10,26 @@ import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const clientDir = resolve(__dirname, "..", "dist", "client");
-const assetsDir = join(clientDir, "assets");
-const manifestPath = join(clientDir, ".vite", "manifest.json");
+
+// 1. Dynamically find out if the client assets are in dist/client or straight in dist/
+let clientDir = resolve(__dirname, "..", "dist", "client");
+let assetsDir = join(clientDir, "assets");
+let manifestPath = join(clientDir, ".vite", "manifest.json");
 
 if (!existsSync(assetsDir) || !existsSync(manifestPath)) {
-  console.error("[spa-html] dist/client assets or manifest not found — run `vite build` first.");
+  console.log("[spa-html] dist/client not found. Trying root dist/ as fallback...");
+  clientDir = resolve(__dirname, "..", "dist");
+  assetsDir = join(clientDir, "assets");
+  manifestPath = join(clientDir, ".vite", "manifest.json");
+}
+
+// 2. Perform the validation pass on the discovered directory
+if (!existsSync(assetsDir) || !existsSync(manifestPath)) {
+  console.error("[spa-html] Execution aborted: Build assets or .vite/manifest.json could not be located in dist/ or dist/client/.");
   process.exit(1);
 }
+
+console.log(`[spa-html] Targeted client directory verified at: ${clientDir}`);
 
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 const manifestEntries = Object.values(manifest);
@@ -26,7 +38,7 @@ const entryJs = entry?.file;
 const entryCss = Array.isArray(entry?.css) ? entry.css[0] : undefined;
 
 if (!entryJs) {
-  console.error("[spa-html] Could not find a client entry in dist/client/.vite/manifest.json");
+  console.error(`[spa-html] Could not find a client entry inside manifest at: ${manifestPath}`);
   process.exit(1);
 }
 
@@ -53,7 +65,7 @@ ${entryCss ? `    <link rel="stylesheet" href="/${entryCss}" />\n` : ""}    <scr
 `;
 
 writeFileSync(join(clientDir, "index.html"), html, "utf8");
-console.log(`[spa-html] Wrote dist/client/index.html (entry=${entryJs}${entryCss ? `, css=${entryCss}` : ""})`);
+console.log(`[spa-html] Wrote index.html to target directory (entry=${entryJs}${entryCss ? `, css=${entryCss}` : ""})`);
 
 // Copy public/ assets that the build may not auto-copy (defensive)
 const publicDir = resolve(__dirname, "..", "public");
